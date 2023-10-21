@@ -2,6 +2,9 @@ import hashlib
 import string
 import itertools
 import time
+from numba import jit
+import warnings
+warnings.filterwarnings('ignore')
 
 hashes1 = ['f14aae6a0e050b74e4b7b9a5b2ef1a60ceccbbca39b132ae3e8bf88d3a946c6d8687f3266fd2b626419d8b67dcf1d8d7c0fe72d4919d9bd05efbd37070cfb41a',
           'e85e639da67767984cebd6347092df661ed79e1ad21e402f8e7de01fdedb5b0f165cbb30a20948f1ba3f94fe33de5d5377e7f6c7bb47d017e6dab6a217d6cc24',
@@ -30,20 +33,47 @@ hashes3 = [('63328352350c9bd9611497d97fef965bda1d94ca15cc47d5053e164f4066f546828
            ('6f5ad32136a430850add25317336847005e72a7cfe4e90ce9d86b89d87196ff6566322d11c13675906883c8072a66ebe87226e2bc834ea523adbbc88d2463ab3', '894c88a4'),
            ('21a60bdd58abc97b1c3084ea8c89aeaef97d682c543ff6edd540040af20b5db228fbce66fac962bdb2b2492f40dd977a944f1c25bc8243a4061dfeeb02ab721e', '4c8f1a45')]
 
-passwords = open("PasswordDictionary.txt", mode="r")
+alphabet1 = string.ascii_lowercase + string.digits
+passwords = open("PasswordDictionary.txt", mode="r", encoding='ascii')
+
+def pass_list():
+    passwords = open("PasswordDictionary.txt", mode="r", encoding='ascii')
+    output = []
+    for i in passwords:
+        i = i.strip()
+        output.append(i)
+    return output
 
 
-# Task 1: Loops through list of hashes given, uses itertools to produce every password in the alphabet in shortlex order
+passwords_gpu = pass_list()
+
+
+def product1(*args, repeat=1):
+    # product('ABCD', 'xy') --> Ax Ay Bx By Cx Cy Dx Dy
+    # product(range(2), repeat=3) --> 000 001 010 011 100 101 110 111
+    print("poop2")
+    pools = [tuple(pool) for pool in args] * repeat
+    result = [[]]
+    print("poop")
+    for pool in pools:
+        result = [x+[y] for x in result for y in pool]
+    for prod in result:
+        print(tuple(prod))
+        yield tuple(prod)
+
+    print(result)
+
+
 def function_1(hash_list):
     start = time.time()
-    potential = string.ascii_lowercase + string.digits
+    alphabet = string.ascii_lowercase + string.digits
     answers = []
-    counter = 1
-    for i in hash_list:
+    for hash in hash_list:
+        counter = 1          #Used for progressively increasing length of string generated
         found = 0   # Create a variable for if item has been found to allow for skipping of current run without breaking from entire loop
         while found != 1:   # While loop runs until password is found
-            for string1 in map(''.join, itertools.product(potential, repeat=counter)):    # Use of itertools idea from: https://stackoverflow.com/questions/16347583/how-to-generate-all-possible-strings-in-python
-                if hashlib.sha512(bytes(string1, 'ascii')).hexdigest() == i:    # Computes hash of generated string, compares to given hash
+            for string1 in map(''.join, itertools.product(alphabet, repeat=counter)):    # Use of itertools idea from: https://stackoverflow.com/questions/16347583/how-to-generate-all-possible-strings-in-python
+                if hashlib.sha512(bytes(string1, 'ascii')).hexdigest() == hash:    # Computes hash of generated string, compares to given hash
                     answers.append(string1)
                     found = 1
                     break
@@ -61,17 +91,17 @@ def function_2(passdict, hashes):
     start = time.time()
     hashdict = {}   # Use Python Dictionary, keys: Hashes, contents: password
     answers = []
-    for j in hashes:
-        if j in hashdict:   # If hash is already computed from previous running, then no need to compute
-            answers.append(hashdict[j])
+    for hash in hashes:
+        if hash in hashdict:   # If hash is already computed from previous running, then no need to compute
+            answers.append(hashdict[hash])
         else:   # Strips newlines, calcs hash, adds to dict, and compares to see if it matches given hash
-            for i in passdict:
-                i = i.strip()
-                x = hashlib.sha512(bytes(i, 'ascii')).hexdigest()
-                hashdict[x] = i
+            for password in passdict:
+                password = password.strip()
+                newhash = hashlib.sha512(bytes(password, 'ascii')).hexdigest()
+                hashdict[newhash] = password
 
-                if x == j:
-                    answers.append(i)
+                if newhash == hash:
+                    answers.append(password)
                     break
 
     print(answers)
@@ -81,17 +111,18 @@ def function_2(passdict, hashes):
 
 
 # Task 3: To crack salted passwords given salt. Reused code from task 2, removing hashdict
+
 def function_3(passdict, hashes):
     start = time.time()
     answers = []
-    for j in hashes:
+    for hash in hashes:
         passdict.seek(0)    # Resets pointer to start for each hash as no precalculating because of unique salts
-        for i in passdict:
-            i_salt = i.strip()+j[1]     # Strips newlines, adds salt
-            x = hashlib.sha512(bytes(i_salt, 'ascii')).hexdigest()  # calcs hash
+        for password in passdict:
+            i_salt = password.strip()+hash[1]     # Strips newlines, adds salt
+            newhash = hashlib.sha512(bytes(i_salt, 'ascii')).hexdigest()  # calcs hash
 
-            if x == j[0]:   # If hashes match, stores passwords, stripping newlines
-                answers.append(i.strip())
+            if newhash == hash[0]:   # If hashes match, stores passwords, stripping newlines
+                answers.append(password.strip())
                 break
 
     print(answers)
@@ -99,7 +130,76 @@ def function_3(passdict, hashes):
     print(end - start)
     return answers
 
+
+
+@jit(nopython=True)
+def function_1_gpu(hash_list):
+    start = time.time()
+    alphabet = string.ascii_lowercase + string.digits
+    answers = []
+    for hash in hash_list:
+        counter = 1          #Used for progressively increasing length of string generated
+        found = 0   # Create a variable for if item has been found to allow for skipping of current run without breaking from entire loop
+        while found != 1:   # While loop runs until password is found
+            for string1 in map(''.join, itertools.product(alphabet, repeat=counter)):    # Use of itertools idea from: https://stackoverflow.com/questions/16347583/how-to-generate-all-possible-strings-in-python
+                if hashlib.sha512(bytes(string1, 'ascii')).hexdigest() == hash:    # Computes hash of generated string, compares to given hash
+                    answers.append(string1)
+                    found = 1
+                    break
+            counter += 1
+
+    print(answers)
+    end = time.time()
+    print(end - start)
+    return answers
+
+
+@jit(nopython=True)
+def function_2_gpu(passdict, hashes):
+    # passdict.seek(0)    # In case of prior access to file, reset pointer to start
+    # start = time.time()
+    hashdict = {}   # Use Python Dictionary, keys: Hashes, contents: password
+    answers = []
+    for hash in hashes:
+        if hash in hashdict:   # If hash is already computed from previous running, then no need to compute
+            answers.append(hashdict[hash])
+        else:   # Strips newlines, calcs hash, adds to dict, and compares to see if it matches given hash
+            for password in passdict:
+                # password = password.strip()
+                newhash = hashlib.sha512(bytes(password, 'ascii')).hexdigest()
+                hashdict[newhash] = password
+
+                if newhash == hash:
+                    answers.append(password)
+                    break
+
+    print(answers)
+    end = time.time()
+    print(end-start)
+    return answers
+
+@jit(nopython=True)
+def function_3_gpu(passdict, hashes):
+    start = time.time()
+    answers = []
+    for hash in hashes:
+        passdict.seek(0)    # Resets pointer to start for each hash as no precalculating because of unique salts
+        for password in passdict:
+            i_salt = password.strip()+hash[1]     # Strips newlines, adds salt
+            newhash = hashlib.sha512(bytes(i_salt, 'ascii')).hexdigest()  # calcs hash
+
+            if newhash == hash[0]:   # If hashes match, stores passwords, stripping newlines
+                answers.append(password.strip())
+                break
+
+    print(answers)
+    end = time.time()
+    print(end - start)
+    return answers
+
+
 # COULD RENAME VARIABLES IN ALL FUNCTIONS FOR EASIER UNDERSTANDING OF CODE
+product1('ABC', 'xy', repeat=3)
 function_1(hashes1)
 function_2(passwords, hashes2)
 function_3(passwords, hashes3)
