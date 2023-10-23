@@ -4,7 +4,6 @@ import itertools
 import time
 from numba import jit
 import warnings
-import matplotlib.pyplot as plt
 warnings.filterwarnings('ignore')
 
 hashes1 = ['f14aae6a0e050b74e4b7b9a5b2ef1a60ceccbbca39b132ae3e8bf88d3a946c6d8687f3266fd2b626419d8b67dcf1d8d7c0fe72d4919d9bd05efbd37070cfb41a',
@@ -55,13 +54,10 @@ passwords_gpu = pass_list()
 
 @jit(locals={'i' : str})
 def product1(alphabet, repeat=1):       #modified version of code from: https://stackoverflow.com/questions/61469388/how-can-i-replace-itertools-product-without-itertools
-    # product('ABCD', 'xy') --> Ax Ay Bx By Cx Cy Dx Dy
-    # product(range(2), repeat=3) --> 000 001 010 011 100 101 110 111
     pools = [alphabet] * repeat
     result = [[]]
     out = ""
     for pool in pools:
-        #result = [x+[y] for x in result for y in pool]
         for x in result:
             for y in pool:
                 temp = (x+[y])
