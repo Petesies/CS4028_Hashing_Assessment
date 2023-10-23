@@ -4,6 +4,7 @@ import itertools
 import time
 from numba import jit
 import warnings
+import matplotlib.pyplot as plt
 warnings.filterwarnings('ignore')
 
 hashes1 = ['f14aae6a0e050b74e4b7b9a5b2ef1a60ceccbbca39b132ae3e8bf88d3a946c6d8687f3266fd2b626419d8b67dcf1d8d7c0fe72d4919d9bd05efbd37070cfb41a',
@@ -36,10 +37,14 @@ hashes3 = [('63328352350c9bd9611497d97fef965bda1d94ca15cc47d5053e164f4066f546828
 alphabet1 = string.ascii_lowercase + string.digits
 passwords = open("PasswordDictionary.txt", mode="r", encoding='ascii')
 
+
+############### TEST FUNCTIONS FOR GPU IMPLEMENTATION, NO USE IN FINAL VERSION  ##########################
+
+
 def pass_list():
-    passwords = open("PasswordDictionary.txt", mode="r", encoding='ascii')
+    passwordslocal = open("PasswordDictionary.txt", mode="r", encoding='ascii')
     output = []
-    for i in passwords:
+    for i in passwordslocal:
         i = i.strip()
         output.append(i)
     return output
@@ -48,24 +53,29 @@ def pass_list():
 passwords_gpu = pass_list()
 
 
-def product1(*args, repeat=1):
+@jit(locals={'i' : str})
+def product1(alphabet, repeat=1):       #modified version of code from: https://stackoverflow.com/questions/61469388/how-can-i-replace-itertools-product-without-itertools
     # product('ABCD', 'xy') --> Ax Ay Bx By Cx Cy Dx Dy
     # product(range(2), repeat=3) --> 000 001 010 011 100 101 110 111
-    print("poop2")
-    pools = [tuple(pool) for pool in args] * repeat
+    pools = [alphabet] * repeat
     result = [[]]
-    print("poop")
+    out = ""
     for pool in pools:
-        result = [x+[y] for x in result for y in pool]
-    for prod in result:
-        print(tuple(prod))
-        yield tuple(prod)
+        #result = [x+[y] for x in result for y in pool]
+        for x in result:
+            for y in pool:
+                temp = (x+[y])
+                for i in temp:
+                    out += i
+                yield out
+                out = ""
+                result += [x+[y]]
 
-    print(result)
+#####################   END OF TEST FUNCTIONS   ########################################################
 
 
 def function_1(hash_list):
-    start = time.time()
+    # start = time.time()
     alphabet = string.ascii_lowercase + string.digits
     answers = []
     for hash in hash_list:
@@ -79,16 +89,16 @@ def function_1(hash_list):
                     break
             counter += 1
 
-    print(answers)
-    end = time.time()
-    print(end - start)
+    # print(answers)
+    # end = time.time()
+    # print(end - start)
     return answers
 
 
-# Task 2: Use given dictionary to generate hashes of common passwords and compare.
+# Task 2: Use given dictionary to generate hashes of common passwords and compare. - COULD DO WITH NOT FOUND OPTION
 def function_2(passdict, hashes):
     passdict.seek(0)    # In case of prior access to file, reset pointer to start
-    start = time.time()
+    # start = time.time()
     hashdict = {}   # Use Python Dictionary, keys: Hashes, contents: password
     answers = []
     for hash in hashes:
@@ -104,16 +114,15 @@ def function_2(passdict, hashes):
                     answers.append(password)
                     break
 
-    print(answers)
-    end = time.time()
-    print(end-start)
+    # print(answers)
+    # end = time.time()
+    # print(end-start)
     return answers
 
 
 # Task 3: To crack salted passwords given salt. Reused code from task 2, removing hashdict
-
 def function_3(passdict, hashes):
-    start = time.time()
+    # start = time.time()
     answers = []
     for hash in hashes:
         passdict.seek(0)    # Resets pointer to start for each hash as no precalculating because of unique salts
@@ -125,16 +134,15 @@ def function_3(passdict, hashes):
                 answers.append(password.strip())
                 break
 
-    print(answers)
-    end = time.time()
-    print(end - start)
+    # print(answers)
+    # end = time.time()
+    # print(end - start)
     return answers
 
 
-
-@jit(nopython=True)
+@jit()
 def function_1_gpu(hash_list):
-    start = time.time()
+    # start = time.time()
     alphabet = string.ascii_lowercase + string.digits
     answers = []
     for hash in hash_list:
@@ -148,15 +156,15 @@ def function_1_gpu(hash_list):
                     break
             counter += 1
 
-    print(answers)
-    end = time.time()
-    print(end - start)
+    # print(answers)
+    # end = time.time()
+    # print(end - start)
     return answers
 
 
-@jit(nopython=True)
+@jit()
 def function_2_gpu(passdict, hashes):
-    # passdict.seek(0)    # In case of prior access to file, reset pointer to start
+    passdict.seek(0)    # In case of prior access to file, reset pointer to start
     # start = time.time()
     hashdict = {}   # Use Python Dictionary, keys: Hashes, contents: password
     answers = []
@@ -165,7 +173,7 @@ def function_2_gpu(passdict, hashes):
             answers.append(hashdict[hash])
         else:   # Strips newlines, calcs hash, adds to dict, and compares to see if it matches given hash
             for password in passdict:
-                # password = password.strip()
+                password = password.strip() #comment out for nopython=True, use gpupasswords
                 newhash = hashlib.sha512(bytes(password, 'ascii')).hexdigest()
                 hashdict[newhash] = password
 
@@ -173,17 +181,18 @@ def function_2_gpu(passdict, hashes):
                     answers.append(password)
                     break
 
-    print(answers)
-    end = time.time()
-    print(end-start)
+    # print(answers)
+    # end = time.time()
+    # print(end-start)
     return answers
 
-@jit(nopython=True)
+
+@jit()
 def function_3_gpu(passdict, hashes):
-    start = time.time()
+    # start = time.time()
     answers = []
     for hash in hashes:
-        passdict.seek(0)    # Resets pointer to start for each hash as no precalculating because of unique salts
+        passdict.seek(0)    # Resets pointer to start for each hash as no precalculating because of unique salts/ Comment out if using nopython=True
         for password in passdict:
             i_salt = password.strip()+hash[1]     # Strips newlines, adds salt
             newhash = hashlib.sha512(bytes(i_salt, 'ascii')).hexdigest()  # calcs hash
@@ -192,14 +201,21 @@ def function_3_gpu(passdict, hashes):
                 answers.append(password.strip())
                 break
 
-    print(answers)
-    end = time.time()
-    print(end - start)
+    # print(answers)
+    # end = time.time()
+    # print(end - start)
     return answers
 
 
+# function_1(hashes1)
+# function_2(passwords, hashes2)
+# function_3(passwords, hashes3)
+
+# function_1_gpu(hashes1)
+# function_2_gpu(passwords_gpu, hashes2)
+# function_3_gpu(passwords_gpu, hashes3)
+
+
 # COULD RENAME VARIABLES IN ALL FUNCTIONS FOR EASIER UNDERSTANDING OF CODE
-product1('ABC', 'xy', repeat=3)
-function_1(hashes1)
-function_2(passwords, hashes2)
-function_3(passwords, hashes3)
+# for i in product1(alphabet1, repeat=2):
+#     print(i)
